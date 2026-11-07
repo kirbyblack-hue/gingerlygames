@@ -1,0 +1,104 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://w3.org">
+<html xmlns="http://w3.org" lang="tr">
+<head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>RetroAPK - Yönetim ve PC Paneli</title>
+    <!-- Supabase Resmi JS Kütüphanesi -->
+    <script src="https://jsdelivr.net"></script>
+    <style type="text/css">
+        body { font-family: Arial, sans-serif; background-color: #0a0a0a; color: #e0e0e0; margin: 0; padding: 20px; }
+        .main-container { background-color: #121212; padding: 20px; border: 1px solid #2d2d2d; max-width: 800px; margin: 0 auto; }
+        .header { background-color: #1f1f1f; border-bottom: 2px solid #4caf50; padding: 15px; text-align: center; }
+        .header h1 { margin: 0; font-size: 22px; color: #4caf50; }
+        .upload-section { background-color: #1f1f1f; border: 1px dashed #4caf50; padding: 15px; margin: 20px 0; }
+        .upload-title { font-weight: bold; color: #4caf50; margin-bottom: 10px; }
+        .text-input, .select-input { background-color: #2e2e2e; border: 1px solid #4caf50; color: #ffffff; padding: 6px; width: 60%; margin-bottom: 10px; display:block; }
+        .file-input { color: #ffffff; margin-bottom: 10px; display: block; }
+        .btn-submit { background-color: #4caf50; color: #ffffff; border: none; padding: 8px 16px; font-weight: bold; cursor: pointer; }
+        #status { color: #ff9800; font-weight: bold; font-size: 13px; margin-top: 10px; }
+    </style>
+</head>
+<body>
+
+<div class="main-container">
+    <div class="header">
+        <h1>RetroAPK Arşivi - PC Sürümü</h1>
+    </div>
+
+    <!-- SUPABASE UPLOAD ALANI -->
+    <div class="upload-section">
+        <div class="upload-title">▲ Yeni APK Yükle (Supabase Entegrasyonlu)</div>
+        <form id="uploadForm" onsubmit="return false;">
+            <label>Uygulama Adı ve Sürümü:</label>
+            <input type="text" id="appName" class="text-input" placeholder="Örn: WhatsApp v2.11" required />
+            
+            <label>Kategori:</label>
+            <select id="appCategory" class="select-input">
+                <option value="social">İnternet & Sosyal Medya</option>
+                <option value="system">Sistem Araçları</option>
+                <option value="game">Klasik Oyunlar</option>
+            </select>
+
+            <label>APK Dosyası:</label>
+            <input type="file" id="apkFile" class="file-input" accept=".apk" required />
+            
+            <button id="submitBtn" class="btn-submit" onclick="handleUpload()">YÜKLEMEYİ BAŞLAT</button>
+        </form>
+        <div id="status"></div>
+    </div>
+</div>
+
+<script type="text/javascript">
+    // Supabase Bağlantı Bilgileriniz (Kendi bilgilerinizle değiştirin)
+    const SUPABASE_URL = "https://YOUR_SUPABASE_PROJECT_URL.supabase.co";
+    const SUPABASE_KEY = "YOUR_SUPABASE_ANON_KEY";
+    const supabase = Supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+    async function handleUpload() {
+        const fileInput = document.getElementById('apkFile');
+        const appName = document.getElementById('appName').value;
+        const category = document.getElementById('appCategory').value;
+        const statusDiv = document.getElementById('status');
+        
+        if (!fileInput.files.length || !appName) {
+            statusDiv.innerText = "Lütfen tüm alanları doldurun!";
+            return;
+        }
+
+        const file = fileInput.files[0];
+        const fileSizeMB = (file.size / (1024 * 1024)).toFixed(1) + " MB";
+        const fileName = Date.now() + "_" + file.name;
+
+        statusDiv.innerText = "Dosya yükleniyor (Bucket)...";
+
+        // 1. Dosyayı Supabase Storage'a Yükle (Önce Supabase'de 'apk-files' adında bir Public Bucket açmalısınız)
+        const { data: storageData, error: storageError } = await supabase.storage
+            .from('apk-files')
+            .upload(fileName, file);
+
+        if (storageError) {
+            statusDiv.innerText = "Yükleme Hatası: " + storageError.message;
+            return;
+        }
+
+        // Public indirme linkini al
+        const { data: { publicUrl } } = supabase.storage.from('apk-files').getPublicUrl(fileName);
+
+        statusDiv.innerText = "Veritabanına kaydediliyor...";
+
+        // 2. Veritabanına (Database) Kaydet
+        const { error: dbError } = await supabase
+            .from('apks')
+            .insert([{ app_name: appName, file_url: publicUrl, file_size: fileSizeMB, category: category }]);
+
+        if (dbError) {
+            statusDiv.innerText = "Veritabanı Hatası: " + dbError.message;
+        } else {
+            statusDiv.innerText = "✔ Başarıyla Yüklendi! Sayfaların güncellenmesi için GitHub tetiklendi.";
+            document.getElementById('uploadForm').reset();
+        }
+    }
+</script>
+</body>
+</html>
