@@ -1,1 +1,38 @@
+name: Supabase ile Mobil Siteyi Otomatik Yenile
+on:
+  push:
+    branches:
+      - main
+  schedule:
+    - cron: '*/15 * * * *' # Her 15 dakikada bir Supabase'de yeni APK var mı diye kontrol eder
+  workflow_dispatch: # Manuel (el ile) başlatma butonu açar
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Kodlari Klonla
+      uses: actions/checkout@v3
+
+    - name: Python Kur
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.x'
+
+    - name: Gerekli Kutuphaneleri Yukle
+      run: pip install requests
+
+    - name: Supabase'den Verileri Cek ve HTML Uret
+      env:
+        SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+        SUPABASE_KEY: ${{ secrets.SUPABASE_PUBLISHABLE_KEY }} # Güvenli publishable key kullanıyoruz
+      run: python build_site.py
+
+    - name: Olusan Yeni Mobil Siteyi Depoya Kaydet
+      run: |
+        git config --local user.email "action@github.com"
+        git config --local user.name "GitHub Action"
+        git add mobil/index.html
+        git diff --quiet && git diff --staged --quiet || git commit -m "Dinamik APK listesi Supabase ile esitlendi"
+        git push origin main
 
