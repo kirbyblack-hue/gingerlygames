@@ -1,55 +1,64 @@
 import os
 import requests
+import sys
 
-# Supabase Bilgileri (GitHub Secrets alanından çekilecek)
-SUPABASE_URL = os.environ.get("SUPABASE_URL")
-SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
+try:
+    # 1. Ortam Değişkenlerini Kontrol Et
+    SUPABASE_URL = os.environ.get("SUPABASE_URL")
+    SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
 
-headers = {
-    "apikey": SUPABASE_KEY,
-    "Authorization": f"Bearer {SUPABASE_KEY}"
-}
+    if not SUPABASE_URL or not SUPABASE_KEY:
+        print("\n[HATA] GitHub Secrets eksik!")
+        print(f"SUPABASE_URL var mı?: {'EVET' if SUPABASE_URL else 'HAYIR'}")
+        print(f"SUPABASE_KEY var mı?: {'EVET' if SUPABASE_KEY else 'HAYIR'}")
+        sys.exit(1)
 
-# Veritabanından APK listesini çek (Büyükten küçüğe sıralı)
-response = requests.get(f"{SUPABASE_URL}/rest/v1/apks?order=id.desc", headers=headers)
-apk_list = response.json() if response.status_code == 200 else []
+    headers = {
+        "apikey": SUPABASE_KEY,
+        "Authorization": f"Bearer {SUPABASE_KEY}"
+    }
 
-# Kategorilere ayır
-categories = {"social": "", "system": "", "game": ""}
-kategori_isimleri = {
-    "social": "İnternet & Sosyal Medya",
-    "system": "Sistem Araçları",
-    "game": "Klasik Oyunlar"
-}
-kategori_ikonlari = {"social": "Op", "system": "ES", "game": "FB"}
-kategori_renkleri = {"social": "icon-social", "system": "icon-system", "game": "icon-game"}
+    # 2. Supabase'e İstek At
+    print("[BİLGİ] Supabase'e bağlanılıyor...")
+    url = f"{SUPABASE_URL.rstrip('/')}/rest/v1/apks?order=id.desc"
+    response = requests.get(url, headers=headers)
+    
+    if response.status_code != 200:
+        print(f"\n[HATA] Supabase API Hata Verdi! Durum Kodu: {response.status_code}")
+        print("Hata İçeriği:", response.text)
+        sys.exit(1)
 
-for apk in apk_list:
-    cat = apk.get("category", "system")
-    html_row = f"""
+    apk_list = response.json()
+    print(f"[BİLGİ] Veritabanından {len(apk_list)} adet APK kaydı çekildi.")
+
+    # 3. HTML Şablonunu Oluştur
+    categories = {"social": "", "system": "", "game": ""}
+    kategori_isimleri = {"social": "İnternet & Sosyal Medya", "system": "Sistem Araçları", "game": "Klasik Oyunlar"}
+    kategori_ikonlari = {"social": "Op", "system": "ES", "game": "FB"}
+    kategori_renkleri = {"social": "icon-social", "system": "icon-system", "game": "icon-game"}
+
+    for apk in apk_list:
+        cat = apk.get("category", "system")
+        html_row = f"""
         <tr>
             <td style="width: 35px;" align="center"><div class="app-icon {kategori_renkleri.get(cat, 'icon-system')}">{kategori_ikonlari.get(cat, 'APK')}</div></td>
             <td>
-                <div class="app-title">{apk['app_name']}</div>
-                <div class="app-meta">{apk['file_size']} | Android 2.3+</div>
+                <div class="app-title">{apk.get('app_name', 'Bilinmeyen Uygulama')}</div>
+                <div class="app-meta">{apk.get('file_size', '0 MB')} | Android 2.3+</div>
             </td>
             <td align="right" style="width: 65px;">
-                <a href="{apk['file_url']}" class="btn-download">İNDİR</a>
+                <a href="{apk.get('file_url', '#')}" class="btn-download">İNDİR</a>
             </td>
         </tr>"""
-    if cat in categories:
-        categories[cat] += html_row
+        if cat in categories:
+            categories[cat] += html_row
 
-# Dinamik içerik bloklarını oluştur
-dinamik_icerik = ""
-for key, rows in categories.items():
-    if rows:  # Eğer kategoride uygulama varsa başlığı ve tabloyu ekle
-        dinamik_icerik += f"""
-    <div class="category-title">{kategori_isimleri[key]}</div>
-    <table class="app-table">{rows}</table>"""
+    dinamik_icerik = ""
+    for key, rows in categories.items():
+        if rows:
+            dinamik_icerik += f'\n    <div class="category-title">{kategori_isimleri[key]}</div>\n    <table class="app-table">{rows}\n    </table>'
 
-# SAF HTML ŞABLONU OLUŞTURMA
-mobil_html = f"""<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://w3.org">
+    mobil_html = f"""<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://w3.org">
 <html xmlns="http://w3.org" lang="tr">
 <head>
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
@@ -80,9 +89,12 @@ mobil_html = f"""<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" 
 </body>
 </html>"""
 
-# Mobil klasörü yoksa aç ve index.html'i yazdır
-os.makedirs("mobil", exist_ok=True)
-with open("mobil/index.html", "w", encoding="utf-8") as f:
-    f.write(mobil_html)
+    os.makedirs("mobil", exist_ok=True)
+    with open("mobil/index.html", "w", encoding="utf-8") as f:
+        f.write(mobil_html)
 
-print("✔ Mobil site Supabase verileriyle başarıyla güncellendi!")
+    print("✔ [BAŞARILI] Mobil site başarıyla üretildi!")
+
+except Exception as e:
+    print(f"\n[KRİTİK HATA] Kod çalışırken çöktü! Hata mesajı: {str(e)}")
+    sys.exit(1)
